@@ -1,5 +1,6 @@
+# worker/training/torch_trainer.py
 import torch
-from torch.utils.data import DataLoader, Subset
+from torch.utils.data import DataLoader
 from common.ml_interfaces.trainer import Trainer
 
 
@@ -23,6 +24,7 @@ class TorchTrainer(Trainer):
         optimizer.zero_grad()
 
         for data, target in loader:
+            optimizer.zero_grad()
             output = model(data)
             loss = loss_fn(output, target)
             loss.backward()

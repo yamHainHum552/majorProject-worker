@@ -1,12 +1,9 @@
+# common/models/torch_cnn_model.py
 import torch.nn as nn
 from common.ml_interfaces.model_adapter import ModelAdapter
 
 
 class TorchCNNModel(ModelAdapter):
-    """
-    Shared CNN model for MNIST.
-    Used by both coordinator and worker.
-    """
 
     def __init__(self):
         self.model = None

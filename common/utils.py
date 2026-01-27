@@ -1,10 +1,14 @@
+# common/utils.py
 import platform
-import os
+import psutil
 
 
 def get_machine_info():
+    """
+    Collects basic hardware info for power scoring.
+    """
     return {
-        "hostname": platform.node(),
         "os": platform.system(),
-        "cpu_count": os.cpu_count(),
+        "cpu_cores": psutil.cpu_count(logical=True),
+        "ram_gb": round(psutil.virtual_memory().total / (1024 ** 3), 2)
     }
