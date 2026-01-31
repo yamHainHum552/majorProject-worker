@@ -1,2 +1,5 @@
 /myenv
 myenv
+worker_data/Ham10000_metadata.csv
+/_pycache
+/worker_data
