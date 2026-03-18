@@ -1,5 +1,6 @@
 worker_id: worker_1
 
 coordinator:
-  host: 192.168.1.74
+  # host: 192.168.1.97
+  host: 172.16.4.60
   port: 8000

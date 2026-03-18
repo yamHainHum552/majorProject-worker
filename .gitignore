@@ -1,7 +1,76 @@
-/myenv
-myenv
-worker_data/Ham10000_metadata.csv
-/_pycache
-/worker_data
-worker_data
-__pycache
+# =========================
+# Python Core
+# =========================
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual Environment
+/myenv/
+/venv/
+/env/
+.venv/
+
+# =========================
+# Dataset & Large Files
+# =========================
+worker_data/
+*.csv
+*.zip
+*.tar
+*.gz
+
+# If you want to KEEP metadata but ignore rest, use:
+# worker_data/*
+# !worker_data/Ham10000_metadata.csv
+
+# =========================
+# Model Checkpoints / Artifacts
+# =========================
+*.pt
+*.pth
+*.h5
+*.ckpt
+*.onnx
+
+# Logs
+logs/
+*.log
+
+# =========================
+# OS Generated Files
+# =========================
+.DS_Store
+Thumbs.db
+
+# =========================
+# IDE / Editor
+# =========================
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# =========================
+# Build / Cache
+# =========================
+build/
+dist/
+*.egg-info/
+
+# =========================
+# Temporary Files
+# =========================
+*.tmp
+*.temp
+
+# =========================
+# Jupyter Notebook Checkpoints
+# =========================
+.ipynb_checkpoints/
+
+# =========================
+# Environment Variables
+# =========================
+.env
+.env.*
