@@ -14,13 +14,27 @@ class TorchTrainer:
     """
 
     def train_one_round(self, model_adapter, dataset, config):
+        fine_tune_mode = config.get("fine_tune_mode", "partial")
+        freeze_blocks = config.get("freeze_blocks", 3)
+        if hasattr(model_adapter, "configure_fine_tuning"):
+            model_adapter.configure_fine_tuning(
+                mode=fine_tune_mode,
+                freeze_blocks=freeze_blocks
+            )
+
         model = model_adapter.model
         model.train()
 
-        batch_size = config.get("batch_size", 16)
-        learning_rate = config.get("learning_rate", 3e-4)
+        batch_size = config.get("batch_size", 8)
+        learning_rate = config.get("learning_rate", 1e-4)
+        weight_decay = config.get("weight_decay", 1e-4)
+        label_smoothing = config.get("label_smoothing", 0.1)
         balance_minority_classes = config.get(
             "balance_minority_classes", True
+        )
+        max_upsample_factor = config.get("max_upsample_factor", 3.0)
+        use_class_weighted_loss = config.get(
+            "use_class_weighted_loss", True
         )
 
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -29,7 +43,7 @@ class TorchTrainer:
         optimizer = optim.Adam(
             filter(lambda p: p.requires_grad, model.parameters()),
             lr=learning_rate,
-            weight_decay=1e-5
+            weight_decay=weight_decay
         )
 
         scheduler = ReduceLROnPlateau(
@@ -39,22 +53,50 @@ class TorchTrainer:
             patience=2
         )
 
-        criterion = torch.nn.CrossEntropyLoss()
+        class_weights = None
+        if use_class_weighted_loss:
+            class_weights = dataset.get_class_weights().to(device)
+            print(
+                "[Worker] Using class-weighted loss with weights: "
+                f"{class_weights.tolist()}"
+            )
+
+        criterion = torch.nn.CrossEntropyLoss(
+            weight=class_weights,
+            label_smoothing=label_smoothing
+        )
+
+        print(
+            "[Worker] "
+            + dataset.describe_distribution(
+                "Raw class distribution before augmentation/upsampling"
+            )
+        )
+        print(
+            "[Worker] Using medically conservative augmentation: "
+            "resize, horizontal flip, small rotation, small translation/"
+            "scale, and mild color jitter"
+        )
 
         sampler = None
         shuffle = True
         if balance_minority_classes:
-            sample_weights = dataset.get_sample_weights()
+            upsampling_plan = dataset.get_limited_upsampling_plan(
+                max_upsample_factor=max_upsample_factor
+            )
+            sample_weights = upsampling_plan["sample_weights"]
             sampler = WeightedRandomSampler(
                 weights=sample_weights,
-                num_samples=len(sample_weights),
+                num_samples=upsampling_plan["num_samples"],
                 replacement=True
             )
             shuffle = False
 
             print(
-                "[Worker] Using minority-class upsampling with "
-                f"class distribution: {dataset.get_class_distribution()}"
+                "[Worker] Limited minority upsampling enabled "
+                f"(max factor {max_upsample_factor}x). "
+                "Planned effective class distribution per round: "
+                f"{dataset.format_target_distribution(upsampling_plan['target_counts'])}"
             )
 
         loader = DataLoader(
@@ -98,7 +140,9 @@ class TorchTrainer:
         print(
             f"[Worker] Round completed | "
             f"Avg Loss: {avg_loss:.4f} | "
-            f"Accuracy: {accuracy:.2f}%"
+            f"Accuracy: {accuracy:.2f}% | "
+            f"LR: {learning_rate:.6f} | "
+            f"WD: {weight_decay:.6f}"
         )
 
         updated_weights = model_adapter.get_weights()

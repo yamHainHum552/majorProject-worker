@@ -1,6 +1,7 @@
 # worker/local_dataset.py
 from pathlib import Path
 from collections import Counter
+import math
 from torch.utils.data import Dataset
 from PIL import Image
 import pandas as pd
@@ -40,13 +41,19 @@ class LocalDataset(Dataset):
         # Medical-safe augmentation
         # --------------------------
         self.transform = transform or transforms.Compose([
-            transforms.RandomResizedCrop(224, scale=(0.8, 1.0)),
+            transforms.Resize((224, 224)),
             transforms.RandomHorizontalFlip(p=0.5),
-            transforms.RandomRotation(15),
+            transforms.RandomRotation(10),
+            transforms.RandomAffine(
+                degrees=0,
+                translate=(0.02, 0.02),
+                scale=(0.95, 1.05)
+            ),
             transforms.ColorJitter(
-                brightness=0.1,
-                contrast=0.1,
-                saturation=0.1
+                brightness=0.08,
+                contrast=0.08,
+                saturation=0.05,
+                hue=0.02
             ),
             transforms.ToTensor(),
             transforms.Normalize(
@@ -76,30 +83,72 @@ class LocalDataset(Dataset):
             raise RuntimeError("No valid samples found")
 
         self.class_counts = Counter(label for _, label in self.samples)
-
-    def get_class_distribution(self):
-        inverse_class_map = {
+        self.inverse_class_map = {
             idx: label for label, idx in self.class_map.items()
         }
+
+    def get_class_distribution(self):
         return {
-            inverse_class_map[label]: count
-            for label, count in sorted(self.class_counts.items())
+            self.inverse_class_map[label]: self.class_counts.get(label, 0)
+            for label in sorted(self.inverse_class_map)
         }
 
-    def get_sample_weights(self):
-        total_samples = len(self.samples)
-        num_classes = len(self.class_counts)
-
-        class_weights = {
-            label: total_samples / (num_classes * count)
-            for label, count in self.class_counts.items()
-            if count > 0
-        }
-
-        return torch.tensor(
-            [class_weights[label] for _, label in self.samples],
-            dtype=torch.double
+    def describe_distribution(self, title):
+        distribution = self.get_class_distribution()
+        summary = ", ".join(
+            f"{label}={count}" for label, count in distribution.items()
         )
+        return f"{title}: {summary}"
+
+    def get_limited_upsampling_plan(self, max_upsample_factor=3.0):
+        majority_count = max(self.class_counts.values())
+        target_counts = {}
+
+        for label in sorted(self.inverse_class_map):
+            original_count = self.class_counts.get(label, 0)
+            if original_count == 0:
+                target_counts[label] = 0
+                continue
+
+            capped_target = math.ceil(original_count * max_upsample_factor)
+            target_counts[label] = min(majority_count, capped_target)
+
+        weights = []
+        for _, label in self.samples:
+            original_count = self.class_counts[label]
+            target_count = target_counts[label]
+            weights.append(target_count / original_count)
+
+        return {
+            "sample_weights": torch.tensor(weights, dtype=torch.double),
+            "target_counts": target_counts,
+            "num_samples": int(sum(target_counts.values())),
+            "max_upsample_factor": max_upsample_factor,
+        }
+
+    def get_sample_weights(self, max_upsample_factor=3.0):
+        plan = self.get_limited_upsampling_plan(
+            max_upsample_factor=max_upsample_factor
+        )
+
+        return plan["sample_weights"]
+
+    def get_class_weights(self):
+        total_samples = len(self.samples)
+        num_classes = len(self.class_map)
+
+        weights = torch.ones(num_classes, dtype=torch.float32)
+        for label, count in self.class_counts.items():
+            if count > 0:
+                weights[label] = total_samples / (num_classes * count)
+
+        return weights
+
+    def format_target_distribution(self, target_counts):
+        return {
+            self.inverse_class_map[label]: target_counts.get(label, 0)
+            for label in sorted(self.inverse_class_map)
+        }
 
     def __len__(self):
         return len(self.samples)

@@ -1,6 +1,6 @@
-worker_id: worker_1
+worker_id: node_1(accer)
 
 coordinator:
   # host: 192.168.1.66
-  host: 172.16.1.26
+  host: 172.16.2.130
   port: 8000
