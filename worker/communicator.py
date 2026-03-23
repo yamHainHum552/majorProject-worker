@@ -35,8 +35,8 @@ class WorkerCommunicator:
 
                 return json.loads(body.decode())
 
-        except Exception:
-            # Coordinator may be busy aggregating
+        except Exception as e:
+            print("[Worker] Command poll failed:", e)
             time.sleep(2)
             return {"cmd": "WAIT"}
 
@@ -45,36 +45,50 @@ class WorkerCommunicator:
     # ------------------------------------------------
     def fetch_data_chunk(self, worker_id: str):
 
-        try:
+        retries = 3
 
-            req = urllib.request.Request(
-                f"{self.base_url}/next-data-chunk?worker_id={worker_id}",
-                method="GET",
-            )
+        for attempt in range(retries):
 
-            with urllib.request.urlopen(req, timeout=60) as res:
+            try:
 
-                if res.status == 204:
+                req = urllib.request.Request(
+                    f"{self.base_url}/next-data-chunk?worker_id={worker_id}",
+                    method="GET",
+                )
+
+                with urllib.request.urlopen(req, timeout=60) as res:
+
+                    if res.status == 204:
+                        return None
+
+                    body = res.read()
+
+                    if not body:
+                        return None
+
+                    return json.loads(body.decode())
+
+            except urllib.error.HTTPError as e:
+
+                if e.code == 204:
                     return None
 
-                body = res.read()
+                print(
+                    f"[Worker] Data stream HTTP error "
+                    f"(attempt {attempt + 1}/{retries}):",
+                    e
+                )
 
-                if not body:
-                    return None
+            except Exception as e:
+                print(
+                    f"[Worker] Data stream error "
+                    f"(attempt {attempt + 1}/{retries}):",
+                    e
+                )
 
-                return json.loads(body.decode())
+            time.sleep(2)
 
-        except urllib.error.HTTPError as e:
-
-            if e.code == 204:
-                return None
-
-            print("[Worker] Data stream HTTP error:", e)
-            return None
-
-        except Exception as e:
-            print("[Worker] Data stream error:", e)
-            return None
+        raise RuntimeError("Coordinator dataset stream failed repeatedly")
 
     # ------------------------------------------------
     # DATA READY

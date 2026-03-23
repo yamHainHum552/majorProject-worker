@@ -1,9 +1,11 @@
 # worker/local_dataset.py
 from pathlib import Path
+from collections import Counter
 from torch.utils.data import Dataset
 from PIL import Image
 import pandas as pd
 from torchvision import transforms
+import torch
 
 
 class LocalDataset(Dataset):
@@ -72,6 +74,32 @@ class LocalDataset(Dataset):
 
         if not self.samples:
             raise RuntimeError("No valid samples found")
+
+        self.class_counts = Counter(label for _, label in self.samples)
+
+    def get_class_distribution(self):
+        inverse_class_map = {
+            idx: label for label, idx in self.class_map.items()
+        }
+        return {
+            inverse_class_map[label]: count
+            for label, count in sorted(self.class_counts.items())
+        }
+
+    def get_sample_weights(self):
+        total_samples = len(self.samples)
+        num_classes = len(self.class_counts)
+
+        class_weights = {
+            label: total_samples / (num_classes * count)
+            for label, count in self.class_counts.items()
+            if count > 0
+        }
+
+        return torch.tensor(
+            [class_weights[label] for _, label in self.samples],
+            dtype=torch.double
+        )
 
     def __len__(self):
         return len(self.samples)

@@ -183,7 +183,13 @@ class Worker:
 
             while True:
 
-                resp = self.communicator.fetch_data_chunk(self.worker_id)
+                try:
+                    resp = self.communicator.fetch_data_chunk(self.worker_id)
+                except Exception as e:
+                    raise RuntimeError(
+                        "Dataset transfer interrupted by coordinator: "
+                        f"{e}"
+                    ) from e
 
                 if resp is None:
                     break
